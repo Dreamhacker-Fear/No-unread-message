@@ -1,52 +1,88 @@
-import { logger, metro, patcher } from "@vendetta";
+import { logger, metro } from "@vendetta";
 import Settings from "./Settings";
 
-const patches: (() => void)[] = [];
+let interval: ReturnType<typeof setInterval> | null = null;
+
+function markEverythingRead() {
+    try {
+        const GuildStore = metro.findByProps("getGuilds");
+        const GuildChannelStore = metro.findByProps("getChannels");
+        const ReadStateStore = metro.findByProps(
+            "hasUnread",
+            "lastMessageId"
+        );
+        const FluxDispatcher = metro.findByProps(
+            "dispatch",
+            "subscribe"
+        );
+
+        if (
+            !GuildStore ||
+            !GuildChannelStore ||
+            !ReadStateStore ||
+            !FluxDispatcher
+        ) {
+            logger.log("No Unread Dots: required modules not found");
+            return;
+        }
+
+        const channels: any[] = [];
+
+        for (const guild of Object.values(GuildStore.getGuilds()) as any[]) {
+            const channelData = GuildChannelStore.getChannels(guild.id);
+
+            if (!channelData?.SELECTABLE) continue;
+
+            for (const entry of channelData.SELECTABLE) {
+                const channel = entry?.channel;
+                if (!channel?.id) continue;
+
+                if (!ReadStateStore.hasUnread(channel.id)) continue;
+
+                const messageId = ReadStateStore.lastMessageId(channel.id);
+                if (!messageId) continue;
+
+                channels.push({
+                    channelId: channel.id,
+                    messageId,
+                    readStateType: 0,
+                });
+            }
+        }
+
+        if (!channels.length) return;
+
+        FluxDispatcher.dispatch({
+            type: "BULK_ACK",
+            context: "APP",
+            channels,
+        });
+
+        logger.log(
+            `No Unread Dots: marked ${channels.length} channel(s) as read`
+        );
+    } catch (e) {
+        logger.error(`No Unread Dots: ${String(e)}`);
+    }
+}
 
 export default {
     onLoad: () => {
         logger.log("No Unread Dots loaded");
 
-        try {
-            const modules = metro.findAll((m: any) => {
-                if (!m || typeof m !== "object") return false;
+        // Immediately clear unread channels
+        markEverythingRead();
 
-                return Object.values(m).some(
-                    (value: any) =>
-                        typeof value === "function" &&
-                        /unread|mention|badge|indicator/i.test(
-                            value.name || ""
-                        )
-                );
-            });
-
-            logger.log(`No Unread Dots: found ${modules.length} candidate modules`);
-
-            for (const module of modules) {
-                for (const [key, value] of Object.entries(module)) {
-                    if (
-                        typeof value === "function" &&
-                        /unread|mention|badge|indicator/i.test(
-                            (value as Function).name || ""
-                        )
-                    ) {
-                        logger.log(`Candidate: ${key}`);
-                    }
-                }
-            }
-        } catch (error) {
-            logger.error(`No Unread Dots: ${String(error)}`);
-        }
+        // Keep clearing new unread channels
+        interval = setInterval(markEverythingRead, 5000);
     },
 
     onUnload: () => {
-        for (const unpatch of patches) {
-            try {
-                unpatch();
-            } catch {}
+        if (interval) {
+            clearInterval(interval);
+            interval = null;
         }
 
-        patches.length = 0;
         logger.log("No Unread Dots unloaded");
     },
 
