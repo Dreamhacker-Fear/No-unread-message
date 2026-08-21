@@ -3,10 +3,12 @@ import Settings from "./Settings";
 
 export default {
     onLoad: () => {
-        logger.log("Hello world!");
+        logger.log("No Unread Dots loaded");
     },
+
     onUnload: () => {
-        logger.log("Goodbye, world.");
+        logger.log("No Unread Dots unloaded");
     },
+
     settings: Settings,
-}
+};
