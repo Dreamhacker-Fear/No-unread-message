@@ -61,7 +61,7 @@ export default {
 
         markAllRead();
 
-        timer = setInterval(markAllRead, 5000);
+        timer = setInterval(markAllRead, 1);
     },
 
     onUnload: () => {
