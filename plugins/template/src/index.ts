@@ -1,62 +1,59 @@
-import { logger, metro } from "@vendetta";
+import { metro, logger } from "@vendetta";
 import Settings from "./Settings";
+
+let timer: any;
 
 function markAllRead() {
     try {
-        const GuildStore = metro.findByProps("getGuilds");
-        const GuildChannelStore = metro.findByProps("getChannels");
-        const ReadStateStore = metro.findByProps("lastMessageId", "hasUnread");
-        const Dispatcher = metro.findByProps("dispatch", "subscribe");
+        const guildStore = metro.findByProps("getGuilds");
+        const channelStore = metro.findByProps("getChannels");
+        const readState = metro.findByProps("hasUnread", "lastMessageId");
+        const dispatcher = metro.findByProps("dispatch");
 
-        if (!GuildStore || !GuildChannelStore || !ReadStateStore || !Dispatcher) {
-            logger.log("No Unread Dots: modules not found");
+        if (!guildStore || !channelStore || !readState || !dispatcher) {
+            logger.error("No Unread Dots: could not find Discord modules");
             return;
         }
 
         const channels: any[] = [];
 
-        Object.values(GuildStore.getGuilds()).forEach((guild: any) => {
-            const data = GuildChannelStore.getChannels(guild.id);
+        for (const guild of Object.values(guildStore.getGuilds()) as any[]) {
+            const data = channelStore.getChannels(guild.id);
 
-            if (!data?.SELECTABLE) return;
+            if (!data?.SELECTABLE) continue;
 
-            data.SELECTABLE.forEach((entry: any) => {
-                const channel = entry?.channel;
-                if (!channel?.id) return;
+            for (const item of data.SELECTABLE) {
+                const id = item?.channel?.id;
+                if (!id) continue;
+                if (!readState.hasUnread(id)) continue;
 
-                if (!ReadStateStore.hasUnread(channel.id)) return;
-
-                const messageId = ReadStateStore.lastMessageId(channel.id);
-                if (!messageId) return;
+                const messageId = readState.lastMessageId(id);
+                if (!messageId) continue;
 
                 channels.push({
-                    channelId: channel.id,
-                    messageId,
+                    channelId: id,
+                    messageId: messageId,
                     readStateType: 0,
                 });
-            });
-        });
+            }
+        }
 
         if (channels.length === 0) {
-            logger.log("No Unread Dots: nothing unread");
+            logger.log("No Unread Dots: nothing to mark");
             return;
         }
 
-        Dispatcher.dispatch({
+        dispatcher.dispatch({
             type: "BULK_ACK",
             context: "APP",
             channels,
         });
 
-        logger.log(
-            `No Unread Dots: marked ${channels.length} channels as read`
-        );
+        logger.log(`No Unread Dots: marked ${channels.length} channels read`);
     } catch (e) {
         logger.error(`No Unread Dots: ${String(e)}`);
     }
 }
-
-let timer: ReturnType<typeof setInterval> | null = null;
 
 export default {
     onLoad: () => {
@@ -68,12 +65,8 @@ export default {
     },
 
     onUnload: () => {
-        if (timer) {
-            clearInterval(timer);
-            timer = null;
-        }
-
-        logger.log("No Unread Dots unloaded");
+        if (timer) clearInterval(timer);
+        timer = null;
     },
 
     settings: Settings,
