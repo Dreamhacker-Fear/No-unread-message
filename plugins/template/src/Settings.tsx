@@ -4,6 +4,8 @@ const { FormText } = Forms;
 
 export default () => (
     <FormText>
-        No Unread Dots Settings
+        No Unread Dots{"\n\n"}
+        Messages cleared: 0{"\n\n"}
+        The counter will be connected to the read system next.
     </FormText>
 );
