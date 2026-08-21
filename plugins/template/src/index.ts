@@ -1,61 +1,52 @@
 import { logger, metro, patcher } from "@vendetta";
-import { storage } from "@vendetta/plugin";
 import Settings from "./Settings";
 
-let patches: (() => void)[] = [];
+const patches: (() => void)[] = [];
 
 export default {
     onLoad: () => {
         logger.log("No Unread Dots loaded");
 
-        const hideUnreadDots = storage.hideUnreadDots ?? true;
-        const hideMentionIndicators = storage.hideMentionIndicators ?? true;
-
         try {
-            // Discord's ReadStateStore exposes unread/mention state.
-            const ReadStateStore = metro.findByProps(
-                "ackMessageId",
-                "getGuildChannelUnreadState"
-            );
+            const modules = metro.findAll((m: any) => {
+                if (!m || typeof m !== "object") return false;
 
-            if (!ReadStateStore) {
-                logger.log("No Unread Dots: ReadStateStore not found");
-                return;
-            }
-
-            logger.log("No Unread Dots: ReadStateStore found");
-
-            // Keep the store from reporting unread/mention state.
-            if (hideUnreadDots || hideMentionIndicators) {
-                const original = ReadStateStore.getGuildChannelUnreadState;
-
-                if (typeof original === "function") {
-                    patches.push(
-                        patcher.instead(
-                            ReadStateStore,
-                            "getGuildChannelUnreadState",
-                            (_args, _original) => ({
-                                unread: hideUnreadDots ? false : true,
-                                mentionCount: hideMentionIndicators ? 0 : 1,
-                                isMentionLowImportance: false,
-                            })
+                return Object.values(m).some(
+                    (value: any) =>
+                        typeof value === "function" &&
+                        /unread|mention|badge|indicator/i.test(
+                            value.name || ""
                         )
-                    );
+                );
+            });
+
+            logger.log(`No Unread Dots: found ${modules.length} candidate modules`);
+
+            for (const module of modules) {
+                for (const [key, value] of Object.entries(module)) {
+                    if (
+                        typeof value === "function" &&
+                        /unread|mention|badge|indicator/i.test(
+                            (value as Function).name || ""
+                        )
+                    ) {
+                        logger.log(`Candidate: ${key}`);
+                    }
                 }
             }
-        } catch (e) {
-            logger.error(`No Unread Dots error: ${String(e)}`);
+        } catch (error) {
+            logger.error(`No Unread Dots: ${String(error)}`);
         }
     },
 
     onUnload: () => {
-        patches.forEach((unpatch) => {
+        for (const unpatch of patches) {
             try {
                 unpatch();
             } catch {}
-        });
+        }
 
-        patches = [];
+        patches.length = 0;
         logger.log("No Unread Dots unloaded");
     },
 
