@@ -2,6 +2,7 @@ import { metro, logger } from "@vendetta";
 import Settings from "./Settings";
 
 let timer: any;
+let clearedCount = 0;
 
 function markAllRead() {
     try {
@@ -11,7 +12,6 @@ function markAllRead() {
         const dispatcher = metro.findByProps("dispatch");
 
         if (!guildStore || !channelStore || !readState || !dispatcher) {
-            logger.error("No Unread Dots: could not find Discord modules");
             return;
         }
 
@@ -25,6 +25,7 @@ function markAllRead() {
             for (const item of data.SELECTABLE) {
                 const id = item?.channel?.id;
                 if (!id) continue;
+
                 if (!readState.hasUnread(id)) continue;
 
                 const messageId = readState.lastMessageId(id);
@@ -32,16 +33,13 @@ function markAllRead() {
 
                 channels.push({
                     channelId: id,
-                    messageId: messageId,
+                    messageId,
                     readStateType: 0,
                 });
             }
         }
 
-        if (channels.length === 0) {
-            logger.log("No Unread Dots: nothing to mark");
-            return;
-        }
+        if (!channels.length) return;
 
         dispatcher.dispatch({
             type: "BULK_ACK",
@@ -49,7 +47,12 @@ function markAllRead() {
             channels,
         });
 
-        logger.log(`No Unread Dots: marked ${channels.length} channels read`);
+        // Count every channel acknowledged by this pass
+        clearedCount += channels.length;
+
+        logger.log(
+            `No Unread Dots: cleared ${channels.length} channels (total: ${clearedCount})`
+        );
     } catch (e) {
         logger.error(`No Unread Dots: ${String(e)}`);
     }
@@ -59,14 +62,18 @@ export default {
     onLoad: () => {
         logger.log("No Unread Dots loaded");
 
+        clearedCount = 0;
+
         markAllRead();
 
         timer = setInterval(markAllRead, 250);
     },
 
     onUnload: () => {
-        if (timer) clearInterval(timer);
-        timer = null;
+        if (timer) {
+            clearInterval(timer);
+            timer = null;
+        }
     },
 
     settings: Settings,
