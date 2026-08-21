@@ -1,9 +1,14 @@
 import { Forms } from "@vendetta/ui/components";
 
-const { FormText } = Forms;
+const { FormSection, FormSwitchRow } = Forms;
 
 export default () => (
-    <FormText>
-        No Unread Dots Settings
-    </FormText>
+    <FormSection title="Indicator Settings">
+        <FormSwitchRow
+            label="Hide white unread dots"
+            subLabel="Hide unread indicators."
+            value={true}
+            onValueChange={() => {}}
+        />
+    </FormSection>
 );
